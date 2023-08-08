@@ -49,6 +49,7 @@ import java.util.List;
 import static io.airlift.slice.Slices.wrappedBuffer;
 import static io.trino.spi.StandardErrorCode.GENERIC_INTERNAL_ERROR;
 import static io.trino.spi.type.BigintType.BIGINT;
+import static io.trino.spi.type.DateTimeEncoding.packDateTimeWithZone;
 import static io.trino.spi.type.DateType.DATE;
 import static io.trino.spi.type.Decimals.encodeShortScaledValue;
 import static io.trino.spi.type.IntegerType.INTEGER;
@@ -65,7 +66,9 @@ import static io.trino.spi.type.TinyintType.TINYINT;
 import static java.lang.String.format;
 import static org.apache.paimon.utils.Preconditions.checkArgument;
 
-/** Trino {@link ConnectorPageSource}. */
+/**
+ * Trino {@link ConnectorPageSource}.
+ */
 public abstract class TrinoPageSourceBase implements ConnectorPageSource {
 
     private final RecordReader<InternalRow> reader;
@@ -168,10 +171,19 @@ public abstract class TrinoPageSourceBase implements ConnectorPageSource {
                 DecimalType decimalType = (DecimalType) type;
                 BigDecimal decimal = ((Decimal) value).toBigDecimal();
                 type.writeLong(output, encodeShortScaledValue(decimal, decimalType.getScale()));
-            } else if (type instanceof TimestampType || type instanceof TimestampWithTimeZoneType) {
+            } else if (type instanceof TimestampType) {
                 type.writeLong(
                         output,
-                        ((Timestamp) value).getMillisecond() * MICROSECONDS_PER_MILLISECOND);
+                        clearPrecisionFromMillisecond(((Timestamp) value).getMillisecond(), ((TimestampType) type).getPrecision()) * MICROSECONDS_PER_MILLISECOND);
+            } else if (type instanceof TimestampWithTimeZoneType) {
+                if (clearPrecisionFromMillisecond(((Timestamp) value).getMillisecond(), ((TimestampWithTimeZoneType) type).getPrecision()) * MICROSECONDS_PER_MILLISECOND == 412963867187l){
+                    System.out.println(((Timestamp) value).getMillisecond());
+                    System.out.println(clearPrecisionFromMillisecond(((Timestamp) value).getMillisecond(), ((TimestampWithTimeZoneType) type).getPrecision()) * MICROSECONDS_PER_MILLISECOND);
+                }
+                type.writeLong(
+                        output,
+                        packDateTimeWithZone(clearPrecisionFromMillisecond(((Timestamp) value).getMillisecond(), ((TimestampWithTimeZoneType) type).getPrecision()),UTC_KEY)
+                        );
             } else if (type.equals(TIME_MILLIS)) {
                 type.writeLong(output, Long.valueOf((int) value) * NANOSECONDS_PER_SECOND);
             } else {
@@ -186,15 +198,25 @@ public abstract class TrinoPageSourceBase implements ConnectorPageSource {
         } else if (javaType == Slice.class) {
             writeSlice(output, type, value);
         } else if (javaType == LongTimestamp.class) {
-//            checkArgument(type.equals(TIMESTAMP_TZ_MILLIS));
             Timestamp timestamp = (org.apache.paimon.data.Timestamp) value;
+            TimestampType timestampType = (TimestampType) type;
+            int precision = timestampType.getPrecision();
+            int nanoOfMillisecond = 0;
+            if (precision > 6) {
+                nanoOfMillisecond = timestamp.getNanoOfMillisecond();
+            }
             type.writeObject(
-                    output, fromEpochMillisAndFraction(timestamp.getMillisecond(), 0, UTC_KEY));
+                    output, new LongTimestamp(timestamp.getMillisecond(), nanoOfMillisecond * PICOSECONDS_PER_NANOSECOND));
         } else if (javaType == LongTimestampWithTimeZone.class) {
-//            checkArgument(type.equals(TIMESTAMP_TZ_MILLIS));
             Timestamp timestamp = (org.apache.paimon.data.Timestamp) value;
+            TimestampWithTimeZoneType timestampWithTimeZoneType = (TimestampWithTimeZoneType) type;
+            int precision = timestampWithTimeZoneType.getPrecision();
+            int nanoOfMillisecond = 0;
+            if (precision > 6) {
+                nanoOfMillisecond = timestamp.getNanoOfMillisecond();
+            }
             type.writeObject(
-                    output, fromEpochMillisAndFraction(timestamp.getMillisecond(), 0, UTC_KEY));
+                    output, fromEpochMillisAndFraction(timestamp.getMillisecond(), nanoOfMillisecond * PICOSECONDS_PER_NANOSECOND, UTC_KEY));
         } else if (javaType == Block.class) {
             writeBlock(output, type, logicalType, value);
         } else {
@@ -203,6 +225,28 @@ public abstract class TrinoPageSourceBase implements ConnectorPageSource {
                     format("Unhandled type for %s: %s", javaType.getSimpleName(), type));
         }
     }
+
+    public long clearPrecisionFromMillisecond(long millisecond, int precision) {
+        int index = 6 - precision < 0 ? 0 : 6 - precision;
+        return millisecond / POWERS_OF_TEN[index] * POWERS_OF_TEN[index];
+    }
+
+    static final long[] POWERS_OF_TEN = {
+            1L,
+            10L,
+            100L,
+            1000L,
+            10_000L,
+            100_000L,
+            1_000_000L,
+            10_000_000L,
+            100_000_000L,
+            1_000_000_000L,
+            10_000_000_000L,
+            100_000_000_000L,
+            1000_000_000_000L
+    };
+
 
     private static void writeSlice(BlockBuilder output, Type type, Object value) {
         if (type instanceof VarcharType || type instanceof io.trino.spi.type.CharType) {
