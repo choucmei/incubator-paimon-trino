@@ -66,13 +66,13 @@ public class TrinoQueryRunner {
 
         Map<String, String> options =
                 ImmutableMap.<String, String>builder()
-                        .put("warehouse", catalogDir.toFile().toURI().toString())
+                        .put("warehouse", "/tmp/paimon")
                         .putAll(extraConnectorProperties)
                         .build();
 
         queryRunner.createCatalog(PAIMON_CATALOG, PAIMON_CATALOG, options);
 
-        queryRunner.execute("CREATE SCHEMA tpch");
+//        queryRunner.execute("CREATE SCHEMA tpch");
 
         // TODO
         /*if (createTpchTables) {

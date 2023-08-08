@@ -133,6 +133,11 @@ under the License.
                 </exclusion>
             </exclusions>
         </dependency>
+        <dependency>
+            <groupId>io.trino</groupId>
+            <artifactId>trino-jdbc</artifactId>
+            <version>422</version>
+        </dependency>
     </dependencies>
 
     <build>

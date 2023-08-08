@@ -152,12 +152,12 @@ public class TrinoTypeUtils {
 
         @Override
         public Type visit(TimestampType timestampType) {
-            return io.trino.spi.type.TimestampType.TIMESTAMP_MILLIS;
+            return io.trino.spi.type.TimestampType.createTimestampType(timestampType.getPrecision());
         }
 
         @Override
         public Type visit(LocalZonedTimestampType localZonedTimestampType) {
-            return TimestampWithTimeZoneType.TIMESTAMP_TZ_MILLIS;
+            return TimestampWithTimeZoneType.createTimestampWithTimeZoneType(localZonedTimestampType.getPrecision());
         }
 
         @Override
