@@ -20,7 +20,7 @@ public class TrinoJdbcQuery {
         Connection connection = DriverManager.getConnection(url, properties);
         Statement statement = connection.createStatement();
         query(statement, "show create table tb_all_type");
-        query(statement, "select p,p0,p3,p6,p7,q,q0,q3,q6,q12,q13,r,r0,r3,r6,r12,r13 from tb_all_type limit 1");
+        query(statement, "select p,p0,p3,p6,p7,q,q0,q3,q6,q12,q13,r,r0,r3,r6,r12,r13 from tb_all_type limit 100");
     }
 
 
